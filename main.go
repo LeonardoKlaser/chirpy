@@ -7,11 +7,27 @@ import (
 	"sync/atomic"
 	"text/template"
 	"strings"
+	"errors"
 )
 
 type apiConfig struct{
 	fileserverHits atomic.Int32
 }
+
+func formatProfane(originalText string, sanitizedText string) (string, error){
+	words := strings.Split(sanitizedText, " ")
+	wordsToReturn := strings.Split(originalText, " ")
+	if len(words) != len(wordsToReturn){
+		return "", errors.New("Words whit diferent sizes, cant format it")
+	}
+	for i:=0; i < len(words); i++{
+		if(strings.Contains(words[i], "****")){
+			wordsToReturn[i] = words[i]
+		}
+	}
+	return strings.Join(wordsToReturn, " "), nil
+}
+
 
 func handleHealthz (w http.ResponseWriter, r *http.Request){
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -77,7 +93,7 @@ func handlerValidateChirp(w http.ResponseWriter, r *http.Request) {
 	decoder := json.NewDecoder(r.Body)
 	params := ReturnType{}
 	err := decoder.Decode(&params)
-	if err != nil {
+	if err != nil{
 		log.Printf("Error decoding request body: %v", err)
 		w.WriteHeader(http.StatusBadRequest)
 		errorResponse := ErrorType{Error: "Something went wrong"}
@@ -103,8 +119,18 @@ func handlerValidateChirp(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	replacer := strings.NewReplacer("kerfuffle", "****", "sharbert", "****", "fornax", "****")
-	cleanedBody := replacer.Replace(params.Body)
-	response := ResponseType{CleanedBody: cleanedBody}
+	cleanedBody := replacer.Replace(strings.ToLower(params.Body))
+	responseCleanedBody, err := formatProfane(params.Body, cleanedBody)
+	if err != nil{
+		w.WriteHeader(http.StatusBadRequest)
+		errorFormatStruct := ErrorType{Error: err.Error()}
+		errorReturn, _ := json.Marshal(errorFormatStruct)
+		_, err := w.Write(errorReturn)
+		if err != nil {
+			log.Printf("Error to format cleaned body")
+		}
+	}
+	response := ResponseType{CleanedBody: responseCleanedBody}
 	jsonResponse, err := json.Marshal(response)
 	if err != nil {
 		log.Printf("Error marshaling response: %v", err)
