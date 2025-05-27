@@ -11,7 +11,7 @@ import (
 	"sync/atomic"
 	"text/template"
 	"time"
-
+	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 	"github.com/leonardoklaser/Chirpy/internal/database"
 	_ "github.com/lib/pq"
@@ -135,10 +135,10 @@ func handlerValidateChirp(w http.ResponseWriter, r *http.Request) {
 
 func (cfg *apiConfig) PostUser(w http.ResponseWriter, r *http.Request ){
 	type User struct {
-		Id  string `json:"id"`
-		Created_at  string `json:"created_at"`
-		Updated_at  string `json:"updated_at"`
-		Email string `json:"email"`
+		ID        uuid.UUID `json:"id"`
+		CreatedAt time.Time `json:"created_at"`
+		UpdatedAt time.Time `json:"updated_at"`
+		Email     string    `json:"email"`
 	}
 
 	type requestBody struct{
@@ -159,7 +159,7 @@ func (cfg *apiConfig) PostUser(w http.ResponseWriter, r *http.Request ){
 		return
 	}
 
-	userToReturn := User{Id: user.ID.String(), Created_at: user.CreatedAt.Format(time.UnixDate), Updated_at: user.UpdatedAt.Format(time.UnixDate), Email: user.Email}
+	userToReturn := User{ID: user.ID, CreatedAt: user.CreatedAt, UpdatedAt: user.UpdatedAt, Email: user.Email}
 	respondWithJson(w, http.StatusOK, userToReturn)
 
 
