@@ -1,18 +1,20 @@
 package main
 
 import (
-	"encoding/json"
-	"log"
 	"database/sql"
-	"os"
+	"encoding/json"
+	"errors"
+	"log"
 	"net/http"
+	"os"
+	"strings"
 	"sync/atomic"
 	"text/template"
-	"strings"
-	"errors"
+	"time"
+
 	"github.com/joho/godotenv"
-	_ "github.com/lib/pq"
 	"github.com/leonardoklaser/Chirpy/internal/database"
+	_ "github.com/lib/pq"
 )
 
 type apiConfig struct{
@@ -131,6 +133,38 @@ func handlerValidateChirp(w http.ResponseWriter, r *http.Request) {
 
 }
 
+func (cfg *apiConfig) PostUser(w http.ResponseWriter, r *http.Request ){
+	type User struct {
+		Id  string `json:"id"`
+		Created_at  string `json:"created_at"`
+		Updated_at  string `json:"updated_at"`
+		Email string `json:"email"`
+	}
+
+	type requestBody struct{
+		Email string `json:"email"`
+	}
+
+	decoder := json.NewDecoder(r.Body)
+	params := requestBody{}
+	err := decoder.Decode(&params)
+	if err != nil{
+		respondWithError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	user, err := cfg.DB.CreateUser(r.Context(), params.Email)
+	if err != nil{
+		respondWithError(w, http.StatusBadRequest, "Error to insert new User in Database")
+		return
+	}
+
+	userToReturn := User{Id: user.ID.String(), Created_at: user.CreatedAt.Format(time.UnixDate), Updated_at: user.UpdatedAt.Format(time.UnixDate), Email: user.Email}
+	respondWithJson(w, http.StatusOK, userToReturn)
+
+
+}
+
 func main() {
 
 	godotenv.Load()
@@ -160,6 +194,8 @@ func main() {
 	router.HandleFunc("POST /admin/reset", apiCfg.handleReset)
 
 	router.HandleFunc("POST /api/validate_chirp", handlerValidateChirp)
+
+	router.HandleFunc("POST /api/users", apiCfg.PostUser)
 
 	server := &http.Server{
 		Addr:   ":8080",
