@@ -75,12 +75,12 @@ func main() {
 
 	router.HandleFunc("GET /api/healthz", handleHealthz) 
 
-	router.HandleFunc("GET /api/metrics", apiCfg.HandleMetrics)
+	router.HandleFunc("GET /admin/metrics", apiCfg.HandleMetrics)
 
-	router.HandleFunc("POST /api/reset", apiCfg.handleReset)
+	router.HandleFunc("POST /admin/reset", apiCfg.handleReset)
 
 	server := &http.Server{
-		Addr:   ":8000",
+		Addr:   ":8080",
 		Handler: router,
 	}
 
