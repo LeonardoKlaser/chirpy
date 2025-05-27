@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"sync/atomic"
 	"text/template"
+	"strings"
 )
 
 type apiConfig struct{
@@ -69,8 +70,8 @@ func handlerValidateChirp(w http.ResponseWriter, r *http.Request) {
 	type ErrorType struct {
 		Error string `json:"error"`
 	}
-	type ResponseType struct{
-		Valid bool `json:"valid"`
+	type ResponseType struct {
+		CleanedBody string `json:"cleaned_body"`
 	}
 
 	decoder := json.NewDecoder(r.Body)
@@ -101,12 +102,13 @@ func handlerValidateChirp(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	response := ResponseType{Valid: true}
+	replacer := strings.NewReplacer("kerfuffle", "****", "sharbert", "****", "fornax", "****")
+	cleanedBody := replacer.Replace(params.Body)
+	response := ResponseType{CleanedBody: cleanedBody}
 	jsonResponse, err := json.Marshal(response)
 	if err != nil {
-		log.Printf("Error marshalling response: %v", err)
+		log.Printf("Error marshaling response: %v", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
 	}
 	_, err = w.Write(jsonResponse)
 	if err != nil {
