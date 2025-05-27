@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 	"sync/atomic"
+	"fmt"
 )
 
 type apiConfig struct{
@@ -20,28 +21,42 @@ func handleHealthz (w http.ResponseWriter, r *http.Request){
 
 }
 
-func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
+func (cfg *apiConfig) HandleMetrics(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	metricsBody := fmt.Sprintf("Hits: %d", cfg.fileserverHits.Load())
+	_, err := w.Write([]byte(metricsBody))
+	if err != nil {
+		log.Printf("Error writing response body: %v", err)
+		return
+	}
+}
 
-	
-	
+func (cfg *apiConfig) MiddlewareMetricsInc(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		cfg.fileserverHits.Add(1)
+		next.ServeHTTP(w, r)
+	})
 }
 
 func main() {
 
+	var apiCfg apiConfig
 	router := http.NewServeMux()
 
 	fileServer := http.FileServer(http.Dir("."))
 
 	strippedFileServerHandler := http.StripPrefix("/app/", fileServer)
+	metricsWrappedFileServerHandler := apiCfg.MiddlewareMetricsInc(strippedFileServerHandler)
 
-	router.HandleFunc("/app/", func(w http.ResponseWriter, r *http.Request) {
-		strippedFileServerHandler.ServeHTTP(w, r)
-	})
+	router.HandleFunc("/app/", metricsWrappedFileServerHandler.ServeHTTP)
 
 	router.HandleFunc("/healthz", handleHealthz) 
 
+	router.HandleFunc("/metrics", apiCfg.HandleMetrics)
+
 	server := &http.Server{
-		Addr:   ":8080",
+		Addr:   ":8000",
 		Handler: router,
 	}
 
