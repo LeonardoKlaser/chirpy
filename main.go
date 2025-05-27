@@ -14,11 +14,34 @@ type apiConfig struct{
 	fileserverHits atomic.Int32
 }
 
+type errorResponse struct {
+	Error string `json:"error"`
+}
+
+func respondWithError(w http.ResponseWriter, statusCode int, msg string){
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	response := errorResponse{Error: msg}
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		log.Printf("Error encoding error response: %v", err)
+	}
+}
+
+func respondWithJson(w http.ResponseWriter, statusCode int, data interface{}) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(statusCode)
+		if data != nil {
+			if err := json.NewEncoder(w).Encode(data); err != nil{
+				log.Printf("Error encoding json response: %v", err)
+			}
+		}
+}
+
 func formatProfane(originalText string, sanitizedText string) (string, error){
 	words := strings.Split(sanitizedText, " ")
 	wordsToReturn := strings.Split(originalText, " ")
 	if len(words) != len(wordsToReturn){
-		return "", errors.New("Words whit diferent sizes, cant format it")
+		return "", errors.New("words whit diferent sizes, cant format it")
 	}
 	for i:=0; i < len(words); i++{
 		if(strings.Contains(words[i], "****")){
@@ -44,17 +67,6 @@ func (cfg *apiConfig) handleReset(w http.ResponseWriter, _ *http.Request){
 	w.WriteHeader(http.StatusOK)
 	cfg.fileserverHits.Store(0)
 }
-
-// func (cfg *apiConfig) HandleMetrics(w http.ResponseWriter, r *http.Request) {
-// 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-// 	w.WriteHeader(http.StatusOK)
-// 	metricsBody := fmt.Sprintf("Hits: %d", cfg.fileserverHits.Load())
-// 	_, err := w.Write([]byte(metricsBody))
-// 	if err != nil {
-// 		log.Printf("Error writing response body: %v", err)
-// 		return
-// 	}
-// }
 
 func (cfg *apiConfig) HandleMetrics(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -82,10 +94,6 @@ func handlerValidateChirp(w http.ResponseWriter, r *http.Request) {
 	type ReturnType struct{
 		Body string `json:"body"`
 	}
-
-	type ErrorType struct {
-		Error string `json:"error"`
-	}
 	type ResponseType struct {
 		CleanedBody string `json:"cleaned_body"`
 	}
@@ -94,54 +102,25 @@ func handlerValidateChirp(w http.ResponseWriter, r *http.Request) {
 	params := ReturnType{}
 	err := decoder.Decode(&params)
 	if err != nil{
-		log.Printf("Error decoding request body: %v", err)
-		w.WriteHeader(http.StatusBadRequest)
-		errorResponse := ErrorType{Error: "Something went wrong"}
-		jsonResponse, _ := json.Marshal(errorResponse)
-		_, err := w.Write(jsonResponse)
-		if err != nil{
-			log.Printf("Error writing response body: %v", err)
-		}
+		respondWithError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 
 	if len(params.Body) > 140{
-		w.WriteHeader(http.StatusBadRequest)
-		errorResponse := ErrorType{Error: "Chirp is too long"}
-		jsonResponse, _ := json.Marshal(errorResponse)
-		_, err := w.Write(jsonResponse)
-		if err != nil{
-			log.Printf("Error writing response body: %v", err)
-		}
+		respondWithError(w, http.StatusBadRequest, "Chirp is too long")
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
 	replacer := strings.NewReplacer("kerfuffle", "****", "sharbert", "****", "fornax", "****")
 	cleanedBody := replacer.Replace(strings.ToLower(params.Body))
 	responseCleanedBody, err := formatProfane(params.Body, cleanedBody)
 	if err != nil{
-		w.WriteHeader(http.StatusBadRequest)
-		errorFormatStruct := ErrorType{Error: err.Error()}
-		errorReturn, _ := json.Marshal(errorFormatStruct)
-		_, err := w.Write(errorReturn)
-		if err != nil {
-			log.Printf("Error to format cleaned body")
-		}
-	}
-	response := ResponseType{CleanedBody: responseCleanedBody}
-	jsonResponse, err := json.Marshal(response)
-	if err != nil {
-		log.Printf("Error marshaling response: %v", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-	}
-	_, err = w.Write(jsonResponse)
-	if err != nil {
-		log.Printf("Error writing response body: %v", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		respondWithError(w, http.StatusInternalServerError, "Error formatting profane words")
 		return
 	}
+
+	response := ResponseType{CleanedBody: responseCleanedBody}
+	respondWithJson(w, http.StatusOK, response)
 
 
 }
