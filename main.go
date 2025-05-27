@@ -3,11 +3,14 @@ package main
 import (
 	"encoding/json"
 	"log"
+	"database/sql"
+	"os"
 	"net/http"
 	"sync/atomic"
 	"text/template"
 	"strings"
 	"errors"
+	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 	"github.com/leonardoklaser/Chirpy/internal/database"
 )
@@ -138,8 +141,8 @@ func main() {
 	}
 	dbQueries := database.New(db)
 
-	var apiCfg := apiConfig{
-		DB : dbQueries
+	apiCfg := apiConfig{
+		DB : dbQueries,
 	}
 	router := http.NewServeMux()
 
@@ -164,7 +167,7 @@ func main() {
 	}
 
 	log.Println("Starting server on :8080")
-	err := server.ListenAndServe()
+	err = server.ListenAndServe()
 	if err != nil {
 		log.Fatal(err)
 	}
