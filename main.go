@@ -4,7 +4,7 @@ import (
 	"log"
 	"net/http"
 	"sync/atomic"
-	"fmt"
+	"text/template"
 )
 
 type apiConfig struct{
@@ -27,15 +27,30 @@ func (cfg *apiConfig) handleReset(w http.ResponseWriter, _ *http.Request){
 	cfg.fileserverHits.Store(0)
 }
 
+// func (cfg *apiConfig) HandleMetrics(w http.ResponseWriter, r *http.Request) {
+// 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+// 	w.WriteHeader(http.StatusOK)
+// 	metricsBody := fmt.Sprintf("Hits: %d", cfg.fileserverHits.Load())
+// 	_, err := w.Write([]byte(metricsBody))
+// 	if err != nil {
+// 		log.Printf("Error writing response body: %v", err)
+// 		return
+// 	}
+// }
+
 func (cfg *apiConfig) HandleMetrics(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	metricsBody := fmt.Sprintf("Hits: %d", cfg.fileserverHits.Load())
-	_, err := w.Write([]byte(metricsBody))
+	metricsBody := cfg.fileserverHits.Load()
+
+	tmpl, err := template.ParseFiles("countHits.html")
 	if err != nil {
-		log.Printf("Error writing response body: %v", err)
+		log.Printf("Error parsing template: %v", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
+
+	tmpl.Execute(w, metricsBody)
 }
 
 func (cfg *apiConfig) MiddlewareMetricsInc(next http.Handler) http.Handler {
@@ -44,6 +59,7 @@ func (cfg *apiConfig) MiddlewareMetricsInc(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
+
 
 func main() {
 
@@ -64,7 +80,7 @@ func main() {
 	router.HandleFunc("POST /api/reset", apiCfg.handleReset)
 
 	server := &http.Server{
-		Addr:   ":8080",
+		Addr:   ":8000",
 		Handler: router,
 	}
 
