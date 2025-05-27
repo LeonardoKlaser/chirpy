@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"log"
 	"net/http"
 	"sync/atomic"
@@ -60,6 +61,62 @@ func (cfg *apiConfig) MiddlewareMetricsInc(next http.Handler) http.Handler {
 	})
 }
 
+func handlerValidateChirp(w http.ResponseWriter, r *http.Request) {
+	type ReturnType struct{
+		Body string `json:"body"`
+	}
+
+	type ErrorType struct {
+		Error string `json:"error"`
+	}
+	type ResponseType struct{
+		Valid bool `json:"valid"`
+	}
+
+	decoder := json.NewDecoder(r.Body)
+	params := ReturnType{}
+	err := decoder.Decode(&params)
+	if err != nil {
+		log.Printf("Error decoding request body: %v", err)
+		w.WriteHeader(http.StatusBadRequest)
+		errorResponse := ErrorType{Error: "Something went wrong"}
+		jsonResponse, _ := json.Marshal(errorResponse)
+		_, err := w.Write(jsonResponse)
+		if err != nil{
+			log.Printf("Error writing response body: %v", err)
+		}
+		return
+	}
+
+	if len(params.Body) > 140{
+		w.WriteHeader(http.StatusBadRequest)
+		errorResponse := ErrorType{Error: "Chirp is too long"}
+		jsonResponse, _ := json.Marshal(errorResponse)
+		_, err := w.Write(jsonResponse)
+		if err != nil{
+			log.Printf("Error writing response body: %v", err)
+		}
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	response := ResponseType{Valid: true}
+	jsonResponse, err := json.Marshal(response)
+	if err != nil {
+		log.Printf("Error marshalling response: %v", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	_, err = w.Write(jsonResponse)
+	if err != nil {
+		log.Printf("Error writing response body: %v", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+
+}
 
 func main() {
 
@@ -78,6 +135,8 @@ func main() {
 	router.HandleFunc("GET /admin/metrics", apiCfg.HandleMetrics)
 
 	router.HandleFunc("POST /admin/reset", apiCfg.handleReset)
+
+	router.HandleFunc("POST /api/validate_chirp", handlerValidateChirp)
 
 	server := &http.Server{
 		Addr:   ":8080",
