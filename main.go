@@ -8,10 +8,13 @@ import (
 	"text/template"
 	"strings"
 	"errors"
+	_ "github.com/lib/pq"
+	"github.com/leonardoklaser/Chirpy/internal/database"
 )
 
 type apiConfig struct{
 	fileserverHits atomic.Int32
+	DB *database.Queries
 }
 
 type errorResponse struct {
@@ -127,7 +130,17 @@ func handlerValidateChirp(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 
-	var apiCfg apiConfig
+	godotenv.Load()
+	dbUrl := os.Getenv("DB_URL")
+	db, err := sql.Open("postgres", dbUrl)
+	if err != nil{
+		log.Printf("cant connect to the database")
+	}
+	dbQueries := database.New(db)
+
+	var apiCfg := apiConfig{
+		DB : dbQueries
+	}
 	router := http.NewServeMux()
 
 	fileServer := http.FileServer(http.Dir("."))
