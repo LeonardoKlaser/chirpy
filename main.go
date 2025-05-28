@@ -267,16 +267,17 @@ func (cfg *apiConfig) PostChirps(w http.ResponseWriter, r *http.Request) {
 		UserId    uuid.UUID `json:"user_id"`
 	}
 
-	uuid, err := auth.GetBearerToken(r.Header)
+	token, err := auth.GetBearerToken(r.Header)
 	if err != nil {
 		respondWithError(w, http.StatusUnauthorized, "Invalid or missing Bearer token")
 		return
 	}
-	if uuid == "" {
+	if token == "" {
 		respondWithError(w, http.StatusUnauthorized, "Bearer token is empty")
 		return
 	}
-	_, err = auth.ValidateJWT(uuid, cfg.SecretKey)
+	log.Printf(token)
+	_, err = auth.ValidateJWT(token, cfg.SecretKey)
 	if err != nil {
 		respondWithError(w, http.StatusUnauthorized, fmt.Sprintf("Invalid Bearer token: %v", err))
 		return
@@ -306,7 +307,7 @@ func (cfg *apiConfig) PostChirps(w http.ResponseWriter, r *http.Request) {
 
 	chirp, err := cfg.DB.CreateChirp(r.Context(), createChirpParam)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Error to create new chirp")
+		respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("Error to Create new Chirp: %v", err) )
 		return
 	}
 
