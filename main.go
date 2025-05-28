@@ -161,7 +161,7 @@ func (cfg *apiConfig) PostUser(w http.ResponseWriter, r *http.Request ){
 	}
 
 	userToReturn := User{ID: user.ID, CreatedAt: user.CreatedAt, UpdatedAt: user.UpdatedAt, Email: user.Email}
-	respondWithJson(w, http.StatusOK, userToReturn)
+	respondWithJson(w, http.StatusCreated, userToReturn)
 
 
 }
