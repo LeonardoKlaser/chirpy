@@ -15,7 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 	"github.com/leonardoklaser/Chirpy/internal/database"
-	"github.com/leonardoklaser/Chirpy/internal"
+	"github.com/leonardoklaser/Chirpy/internal/auth"
 	_ "github.com/lib/pq"
 )
 
@@ -174,7 +174,7 @@ func (cfg *apiConfig) PostUser(w http.ResponseWriter, r *http.Request ){
 		respondWithError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
-	passwordHashed, err := internal.HashPassword(params.Password)
+	passwordHashed, err := auth.HashPassword(params.Password)
 	if err != nil {
 		respondWithError(w, http.StatusBadRequest, "Error to has password")
 		return
@@ -241,6 +241,10 @@ func (cfg *apiConfig) GetChirp (w http.ResponseWriter, r *http.Request){
 	}
 	
 	chirp, err := cfg.DB.GetChirpById(r.Context(), uid)
+	if err != nil {
+		respondWithError(w, http.StatusNotFound, fmt.Sprintf("Chirp with ID %s not found", id))
+		return
+	}
 	
 	chirpToReturn := Chirp{
 		ID : chirp.ID,
@@ -327,7 +331,7 @@ func (cfg *apiConfig) LoginUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = internal.CheckPasswordHash(user.Password, params.Password)
+	err = auth.CheckPasswordHash(user.Password, params.Password)
 	if err != nil {
 		respondWithError(w, http.StatusUnauthorized, "Incorrect password")
 		return
