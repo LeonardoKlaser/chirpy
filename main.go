@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
+	"fmt"
 	"net/http"
 	"os"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 	"github.com/leonardoklaser/Chirpy/internal/database"
+	"github.com/leonardoklaser/Chirpy/internal"
 	_ "github.com/lib/pq"
 )
 
@@ -26,6 +28,14 @@ type apiConfig struct{
 type errorResponse struct {
 	Error string `json:"error"`
 }
+
+type Chirp struct {
+                ID        uuid.UUID `json:"id"`
+                CreatedAt time.Time `json:"created_at"`
+                UpdatedAt time.Time `json:"updated_at"`
+                Body string `json:"body"`
+                UserId uuid.UUID `json:"user_id"`
+        }
 
 func respondWithError(w http.ResponseWriter, statusCode int, msg string){
 	w.Header().Set("Content-Type", "application/json")
@@ -44,6 +54,16 @@ func respondWithJson(w http.ResponseWriter, statusCode int, data interface{}) {
 				log.Printf("Error encoding json response: %v", err)
 			}
 		}
+}
+
+func respondWithListJson(w http.ResponseWriter, statusCode int, data []Chirp) {
+                w.Header().Set("Content-Type", "application/json")
+                w.WriteHeader(statusCode)
+                if data != nil {
+                        if err := json.NewEncoder(w).Encode(data); err != nil{
+                                log.Printf("Error encoding json response: %v", err)
+                        }
+                }
 }
 
 func formatProfane(originalText string, sanitizedText string) (string, error){
@@ -144,6 +164,7 @@ func (cfg *apiConfig) PostUser(w http.ResponseWriter, r *http.Request ){
 
 	type requestBody struct{
 		Email string `json:"email"`
+		Password string `json:"password"`
 	}
 
 	decoder := json.NewDecoder(r.Body)
@@ -153,8 +174,13 @@ func (cfg *apiConfig) PostUser(w http.ResponseWriter, r *http.Request ){
 		respondWithError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
-	log.Printf(params.Email)
-	user, err := cfg.DB.CreateUser(r.Context(), params.Email)
+	passwordHashed, err := internal.HashPassword(params.Password)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "Error to has password")
+		return
+	}
+
+	user, err := cfg.DB.CreateUser(r.Context(), database.CreateUserParams{Email : params.Email, Password: passwordHashed})
 	if err != nil{
 		respondWithError(w, http.StatusBadRequest, "Error to insert new User in Database")
 		return
@@ -173,12 +199,142 @@ func (cfg *apiConfig) DeleteUsers(w http.ResponseWriter, r *http.Request){
 	}
 	_, err := cfg.DB.DeleteUsers(r.Context())
 	if err != nil{
-		respondWithError(w, http.StatusBadRequest, "Error to delete user")
+		respondWithError(w, http.StatusBadRequest, fmt.Sprintf("Error to delete user: %v" ,err))
 		return
 	}
 	
 	var nullInterface interface{}
 	respondWithJson(w, http.StatusOK, nullInterface)
+}
+
+func (cfg *apiConfig) ListChirps (w http.ResponseWriter, r *http.Request){
+
+	var chirps []database.Chirp
+	chirps, err := cfg.DB.GetAllChirps(r.Context())
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("Error to list all chirps: %v", err))
+		return
+	}
+
+	var returnChirps []Chirp
+
+	for _, val := range chirps {
+		newChirp := Chirp{
+			ID : val.ID,
+			CreatedAt : val.CreatedAt,
+			UpdatedAt : val.UpdatedAt,
+			Body : val.Body,
+			UserId : val.UserID,
+		}
+		returnChirps = append(returnChirps, newChirp)
+	}
+
+	respondWithListJson(w, http.StatusOK, returnChirps)
+}
+
+func (cfg *apiConfig) GetChirp (w http.ResponseWriter, r *http.Request){
+	id := r.PathValue("id")
+	uid, err := uuid.Parse(id)
+	if err != nil{
+		respondWithError(w, http.StatusBadRequest, fmt.Sprintf("Error to retrieve chirp Id : %v ", err))
+		return
+	}
+	
+	chirp, err := cfg.DB.GetChirpById(r.Context(), uid)
+	
+	chirpToReturn := Chirp{
+		ID : chirp.ID,
+                CreatedAt : chirp.CreatedAt,
+                UpdatedAt : chirp.UpdatedAt,
+                Body : chirp.Body,
+                UserId : chirp.UserID,
+		}
+	respondWithJson(w, http.StatusOK, chirpToReturn)
+}
+
+
+func (cfg *apiConfig) PostChirps (w http.ResponseWriter, r *http.Request){
+	type requestBody struct {
+		Body string `json:"body"`
+		UserID uuid.UUID `json:"user_id"`
+	}
+	type responseBody struct {
+		ID        uuid.UUID `json:"id"`
+                CreatedAt time.Time `json:"created_at"`
+                UpdatedAt time.Time `json:"updated_at"`
+                Body string `json:"body"`
+                UserId uuid.UUID `json:"user_id"`
+	}
+
+	decoder := json.NewDecoder(r.Body)
+	params := requestBody{}
+	err := decoder.Decode(&params)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "Invalid Input")
+		return
+	}
+
+	if len(params.Body) > 140{
+		respondWithError(w, http.StatusBadRequest, "Chirp is too long")
+		return
+	}
+
+	replacer := strings.NewReplacer("kerfuffle", "****", "sharbert", "****", "fornax", "****")
+	cleanedBody := replacer.Replace(strings.ToLower(params.Body))
+	responseCleanedBody, err := formatProfane(params.Body, cleanedBody)
+	if err != nil{
+		respondWithError(w, http.StatusInternalServerError, "Error to format profane words")
+		return
+	}
+
+	createChirpParam := database.CreateChirpParams{Body : responseCleanedBody, UserID : params.UserID}
+
+	chirp, err := cfg.DB.CreateChirp(r.Context(), createChirpParam)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Error to create new chirp")
+		return
+	}
+
+	response := responseBody{ID : chirp.ID, CreatedAt : chirp.CreatedAt, UpdatedAt : chirp.UpdatedAt, Body : chirp.Body, UserId : chirp.UserID}
+	respondWithJson(w, http.StatusCreated, response)
+
+}
+
+func (cfg *apiConfig) LoginUser(w http.ResponseWriter, r *http.Request) {
+	type User struct {
+                ID        uuid.UUID `json:"id"`
+                CreatedAt time.Time `json:"created_at"`
+                UpdatedAt time.Time `json:"updated_at"`
+                Email     string    `json:"email"`
+        }
+
+        type requestBody struct{
+                Email string `json:"email"`
+                Password string `json:"password"`
+        }
+
+        decoder := json.NewDecoder(r.Body)
+        params := requestBody{}
+        err := decoder.Decode(&params)
+        if err != nil{
+                respondWithError(w, http.StatusBadRequest, "Invalid request body")
+                return
+        }
+
+	user, err := cfg.DB.GetUserByEmail(r.Context(), params.Email)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "Email nao cadastrado")
+		return
+	}
+
+	err = internal.CheckPasswordHash(user.Password, params.Password)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Incorrect password")
+		return
+	}
+	
+	respondWithJson(w, http.StatusOK, User{ID: user.ID, CreatedAt: user.CreatedAt, UpdatedAt : user.UpdatedAt, Email: user.Email})
+
 }
 
 func main() {
@@ -214,6 +370,13 @@ func main() {
 
 	router.HandleFunc("POST /api/users", apiCfg.PostUser)
 
+	router.HandleFunc("POST /api/chirps", apiCfg.PostChirps)
+
+	router.HandleFunc("GET /api/chirps", apiCfg.ListChirps)
+
+	router.HandleFunc("GET /api/chirps/{id}", apiCfg.GetChirp)
+
+	router.HandleFunc("POST /api/login", apiCfg.LoginUser)
 	server := &http.Server{
 		Addr:   ":8080",
 		Handler: router,
