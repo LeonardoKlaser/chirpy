@@ -20,6 +20,7 @@ import (
 type apiConfig struct{
 	fileserverHits atomic.Int32
 	DB *database.Queries
+	Environment string
 }
 
 type errorResponse struct {
@@ -70,11 +71,11 @@ func handleHealthz (w http.ResponseWriter, r *http.Request){
 
 }
 
-func (cfg *apiConfig) handleReset(w http.ResponseWriter, _ *http.Request){
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.WriteHeader(http.StatusOK)
-	cfg.fileserverHits.Store(0)
-}
+//func (cfg *apiConfig) handleReset(w http.ResponseWriter, _ *http.Request){
+//	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+//	w.WriteHeader(http.StatusOK)
+//	cfg.fileserverHits.Store(0)
+//}
 
 func (cfg *apiConfig) HandleMetrics(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -165,6 +166,21 @@ func (cfg *apiConfig) PostUser(w http.ResponseWriter, r *http.Request ){
 
 }
 
+func (cfg *apiConfig) DeleteUsers(w http.ResponseWriter, r *http.Request){
+	if cfg.Environment != "Dev" {
+		respondWithError(w, http.StatusForbidden, "This action is available only on development environment")
+		return
+	}
+	_, err := cfg.DB.DeleteUsers(r.Context())
+	if err != nil{
+		respondWithError(w, http.StatusBadRequest, "Error to delete user")
+		return
+	}
+	
+	var nullInterface interface{}
+	respondWithJson(w, http.StatusOK, nullInterface)
+}
+
 func main() {
 
 	godotenv.Load()
@@ -174,9 +190,10 @@ func main() {
 		log.Printf("cant connect to the database")
 	}
 	dbQueries := database.New(db)
-
+	environment := os.Getenv("PLATFORM")
 	apiCfg := apiConfig{
 		DB : dbQueries,
+		Environment: environment,
 	}
 	router := http.NewServeMux()
 
@@ -191,7 +208,7 @@ func main() {
 
 	router.HandleFunc("GET /admin/metrics", apiCfg.HandleMetrics)
 
-	router.HandleFunc("POST /admin/reset", apiCfg.handleReset)
+	router.HandleFunc("POST /admin/reset", apiCfg.DeleteUsers)
 
 	router.HandleFunc("POST /api/validate_chirp", handlerValidateChirp)
 
