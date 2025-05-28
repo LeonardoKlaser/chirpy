@@ -153,7 +153,7 @@ func (cfg *apiConfig) PostUser(w http.ResponseWriter, r *http.Request ){
 		respondWithError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
-
+	log.Printf(params.Email)
 	user, err := cfg.DB.CreateUser(r.Context(), params.Email)
 	if err != nil{
 		respondWithError(w, http.StatusBadRequest, "Error to insert new User in Database")
@@ -167,7 +167,7 @@ func (cfg *apiConfig) PostUser(w http.ResponseWriter, r *http.Request ){
 }
 
 func (cfg *apiConfig) DeleteUsers(w http.ResponseWriter, r *http.Request){
-	if cfg.Environment != "Dev" {
+	if cfg.Environment != "dev" {
 		respondWithError(w, http.StatusForbidden, "This action is available only on development environment")
 		return
 	}
