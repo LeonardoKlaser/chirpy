@@ -12,7 +12,7 @@ import (
 	"sync/atomic"
 	"text/template"
 	"time"
-
+	"sort"
 	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 	"github.com/leonardoklaser/Chirpy/internal/auth"
@@ -25,6 +25,7 @@ type apiConfig struct {
 	DB             *database.Queries
 	Environment    string
 	SecretKey      string
+	PolkaKey       string
 }
 
 type errorResponse struct {
@@ -208,14 +209,28 @@ func (cfg *apiConfig) DeleteUsers(w http.ResponseWriter, r *http.Request) {
 }
 
 func (cfg *apiConfig) ListChirps(w http.ResponseWriter, r *http.Request) {
-
+	
+	author := r.URL.Query().Get("author_id")
 	var chirps []database.Chirp
-	chirps, err := cfg.DB.GetAllChirps(r.Context())
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("Error to list all chirps: %v", err))
-		return
+	var err error
+	if author == ""{
+		chirps, err = cfg.DB.GetAllChirps(r.Context())
+		if err != nil {
+			respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("Error to list all chirps: %v", err))
+			return
+		}
+	}else{
+		authoruuid, err := uuid.Parse(author)
+		if err != nil {
+			respondWithError(w, http.StatusBadRequest, fmt.Sprintf("Error to retrieve Author Id : %v ", err))
+			return
+		}	
+		chirps, err = cfg.DB.GetChirpsByUserId(r.Context(), authoruuid)
+		if err != nil {
+                        respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("Error to list all chirps: %v", err))
+                        return
+                }
 	}
-
 	var returnChirps []Chirp
 
 	for _, val := range chirps {
@@ -228,7 +243,14 @@ func (cfg *apiConfig) ListChirps(w http.ResponseWriter, r *http.Request) {
 		}
 		returnChirps = append(returnChirps, newChirp)
 	}
+	
 
+	sortSlice := r.URL.Query().Get("sort")
+	if sortSlice == "desc"{
+		sort.Slice(returnChirps, func(i, j int) bool { return returnChirps[i].CreatedAt.After(returnChirps[j].CreatedAt)})
+	}else {
+		sort.Slice(returnChirps, func(i, j int) bool { return returnChirps[i].CreatedAt.Before(returnChirps[j].CreatedAt)})
+	}
 	respondWithListJson(w, http.StatusOK, returnChirps)
 }
 
@@ -566,9 +588,20 @@ func (cfg *apiConfig) PolkaWebhook (w http.ResponseWriter, r *http.Request){
 		Data DataUserId `json:"data"`
 	}
 
+	apiPolka, err := auth.GetAPIKey(r.Header)
+	if err != nil{
+		respondWithError(w, http.StatusUnauthorized, "Api token not found at header request")
+                return
+	}
+
+	if cfg.PolkaKey != apiPolka{
+		respondWithError(w, http.StatusUnauthorized, "Invalid token")
+                return
+	}
+
 	decoder := json.NewDecoder(r.Body)
 	params := requestBody{}
-	err := decoder.Decode(&params)
+	err = decoder.Decode(&params)
 	if err != nil{
 		respondWithError(w, http.StatusBadRequest, "Invalid request body")
 		return
@@ -600,10 +633,12 @@ func main() {
 	dbQueries := database.New(db)
 	environment := os.Getenv("PLATFORM")
 	secretKey := os.Getenv("SECRET_KEY")
+	polkakey := os.Getenv("POLKA_KEY")
 	apiCfg := apiConfig{
 		DB:          dbQueries,
 		Environment: environment,
 		SecretKey:   secretKey,
+		PolkaKey : polkakey,
 	}
 	router := http.NewServeMux()
 
