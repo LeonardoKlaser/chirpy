@@ -49,15 +49,16 @@ func (q *Queries) DeleteUsers(ctx context.Context) (sql.Result, error) {
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, created_at, updated_at, email, password FROM users WHERE email = $1
+SELECT id, created_at, is_chirpy_red ,updated_at, email, password FROM users WHERE email = $1
 `
 
 type GetUserByEmailRow struct {
-	ID        uuid.UUID
-	CreatedAt time.Time
-	UpdatedAt time.Time
-	Email     string
-	Password  string
+	ID          uuid.UUID
+	CreatedAt   time.Time
+	IsChirpyRed sql.NullBool
+	UpdatedAt   time.Time
+	Email       string
+	Password    string
 }
 
 func (q *Queries) GetUserByEmail(ctx context.Context, email string) (GetUserByEmailRow, error) {
@@ -66,6 +67,7 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (GetUserByEm
 	err := row.Scan(
 		&i.ID,
 		&i.CreatedAt,
+		&i.IsChirpyRed,
 		&i.UpdatedAt,
 		&i.Email,
 		&i.Password,
@@ -74,7 +76,7 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (GetUserByEm
 }
 
 const updateUserById = `-- name: UpdateUserById :one
-UPDATE users SET email = $1, password = $2 WHERE id = $3 RETURNING id, created_at, updated_at, email
+UPDATE users SET email = $1, password = $2 WHERE id = $3 RETURNING id, created_at, updated_at, email, is_chirpy_red
 `
 
 type UpdateUserByIdParams struct {
@@ -84,10 +86,11 @@ type UpdateUserByIdParams struct {
 }
 
 type UpdateUserByIdRow struct {
-	ID        uuid.UUID
-	CreatedAt time.Time
-	UpdatedAt time.Time
-	Email     string
+	ID          uuid.UUID
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+	Email       string
+	IsChirpyRed sql.NullBool
 }
 
 func (q *Queries) UpdateUserById(ctx context.Context, arg UpdateUserByIdParams) (UpdateUserByIdRow, error) {
@@ -98,6 +101,7 @@ func (q *Queries) UpdateUserById(ctx context.Context, arg UpdateUserByIdParams) 
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Email,
+		&i.IsChirpyRed,
 	)
 	return i, err
 }

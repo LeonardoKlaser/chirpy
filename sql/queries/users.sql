@@ -9,11 +9,11 @@ RETURNING *;
 TRUNCATE TABLE users CASCADE;
 
 -- name: GetUserByEmail :one 
-SELECT id, created_at, updated_at, email, password FROM users WHERE email = $1;
+SELECT id, created_at, is_chirpy_red ,updated_at, email, password FROM users WHERE email = $1;
 
 
 -- name: UpdateUserById :one
-UPDATE users SET email = $1, password = $2 WHERE id = $3 RETURNING id, created_at, updated_at, email;
+UPDATE users SET email = $1, password = $2 WHERE id = $3 RETURNING id, created_at, updated_at, email, is_chirpy_red;
 
 -- name: UpgradeToRed :execresult
 
