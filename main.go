@@ -5,11 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/google/uuid"
-	"github.com/joho/godotenv"
-	"github.com/leonardoklaser/Chirpy/internal/auth"
-	"github.com/leonardoklaser/Chirpy/internal/database"
-	_ "github.com/lib/pq"
 	"log"
 	"net/http"
 	"os"
@@ -17,6 +12,12 @@ import (
 	"sync/atomic"
 	"text/template"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/joho/godotenv"
+	"github.com/leonardoklaser/Chirpy/internal/auth"
+	"github.com/leonardoklaser/Chirpy/internal/database"
+	_ "github.com/lib/pq"
 )
 
 type apiConfig struct {
@@ -276,7 +277,6 @@ func (cfg *apiConfig) PostChirps(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusUnauthorized, "Bearer token is empty")
 		return
 	}
-	log.Printf(token)
 	_, err = auth.ValidateJWT(token, cfg.SecretKey)
 	if err != nil {
 		respondWithError(w, http.StatusUnauthorized, fmt.Sprintf("Invalid Bearer token: %v", err))
@@ -323,12 +323,12 @@ func (cfg *apiConfig) LoginUser(w http.ResponseWriter, r *http.Request) {
 		UpdatedAt time.Time `json:"updated_at"`
 		Email     string    `json:"email"`
 		Token string `json:"token"`
+		Refresh_token string `json:"refresh_token"`
 	}
 
 	type requestBody struct {
 		Email     string `json:"email"`
 		Password  string `json:"password"`
-		ExpiresIn int    `json:"expires_in_seconds"`
 	}
 
 	decoder := json.NewDecoder(r.Body)
@@ -337,11 +337,6 @@ func (cfg *apiConfig) LoginUser(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		respondWithError(w, http.StatusBadRequest, "Invalid request body")
 		return
-	}
-
-	if params.ExpiresIn > 3600 || params.ExpiresIn < 1 {
-		params.ExpiresIn = 3600
-
 	}
 	
 	user, err := cfg.DB.GetUserByEmail(r.Context(), params.Email)
@@ -356,14 +351,87 @@ func (cfg *apiConfig) LoginUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := auth.MakeJWT(user.ID, cfg.SecretKey, time.Duration(params.ExpiresIn)*time.Second)
+	token, err := auth.MakeJWT(user.ID, cfg.SecretKey, time.Duration(3600)*time.Second)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Error generating JWT token")
 		return
 	}
 
-	respondWithJson(w, http.StatusOK, User{ID: user.ID, CreatedAt: user.CreatedAt, UpdatedAt: user.UpdatedAt, Email: user.Email, Token: token})
+	refresh_token, _ := auth.MakeRefreshToken()
+	_, err = cfg.DB.CreateRefreshToken(r.Context(),refresh_token, user.ID, time.Now().Add(60))
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Error generating refresh Token")
+		return
+	}
 
+	respondWithJson(w, http.StatusOK, User{ID: user.ID, CreatedAt: user.CreatedAt, UpdatedAt: user.UpdatedAt, Email: user.Email, Token: token, Refresh_token: refresh_token})
+
+}
+
+func (cfg *apiConfig) RefreshToken(w http.ResponseWriter, r *http.Request){
+
+	type responseBody struct {
+		Token string `json:"token"`
+	}
+
+	token, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Invalid or missing Bearer token")
+		return
+	}
+	if token == "" {
+		respondWithError(w, http.StatusUnauthorized, "Bearer token is empty")
+		return
+	}
+
+	exist, err := cfg.DB.GetValidRefreshToken(r.Context(),token)
+	if err != nil && exist != false {
+		respondWithError(w, http.StatusUnauthorized, "Token invalid")
+		return
+	}
+
+	user, err := cfg.DB.GetUserForValidRefreshToken(r.Context(),token)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Token invalid for this User")
+		return
+	}
+
+	refresh_token, _ := auth.MakeRefreshToken()
+	_, err = cfg.DB.CreateRefreshToken(r.Context(),refresh_token, user.ID, time.Now().Add(1))
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Error generating refresh Token")
+		return
+	}
+	
+	returnToken := responseBody{Token: refresh_token} 
+
+	respondWithJson(w, http.StatusOK, returnToken )
+}
+
+func (cfg *apiConfig) RevokeRefreshToken(w http.ResponseWriter, r *http.Request){
+	token, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Invalid or missing Bearer token")
+		return
+	}
+	if token == "" {
+		respondWithError(w, http.StatusUnauthorized, "Bearer token is empty")
+		return
+	}
+
+	exist, err := cfg.DB.GetValidRefreshToken(r.Context(),token)
+	if err != nil && exist != false {
+		respondWithError(w, http.StatusUnauthorized, "Token invalid")
+		return
+	}
+
+	_, err = cfg.DB.RevokeRefreshToken(r.Context(),token)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Error to revoke token")
+		return
+	}
+	var nullInterface interface{}
+	respondWithJson(w, http.StatusOK, nullInterface)
 }
 
 func main() {
@@ -408,6 +476,11 @@ func main() {
 	router.HandleFunc("GET /api/chirps/{id}", apiCfg.GetChirp)
 
 	router.HandleFunc("POST /api/login", apiCfg.LoginUser)
+
+	router.HandleFunc("POST /api/revoke", apiCfg.RevokeRefreshToken)
+
+	router.HandleFunc("POST /api/refresh", apiCfg.RefreshToken)
+	
 	server := &http.Server{
 		Addr:    ":8080",
 		Handler: router,
