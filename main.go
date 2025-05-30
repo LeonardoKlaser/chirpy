@@ -160,6 +160,7 @@ func (cfg *apiConfig) PostUser(w http.ResponseWriter, r *http.Request) {
 		CreatedAt time.Time `json:"created_at"`
 		UpdatedAt time.Time `json:"updated_at"`
 		Email     string    `json:"email"`
+		ChirpyRed bool `json:"is_chirpy_red"`
 	}
 
 	type requestBody struct {
@@ -186,7 +187,7 @@ func (cfg *apiConfig) PostUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userToReturn := User{ID: user.ID, CreatedAt: user.CreatedAt, UpdatedAt: user.UpdatedAt, Email: user.Email}
+	userToReturn := User{ID: user.ID, CreatedAt: user.CreatedAt, UpdatedAt: user.UpdatedAt, Email: user.Email, ChirpyRed: user.IsChirpyRed.Bool}
 	respondWithJson(w, http.StatusCreated, userToReturn)
 
 }
@@ -326,6 +327,7 @@ func (cfg *apiConfig) LoginUser(w http.ResponseWriter, r *http.Request) {
 		Email     string    `json:"email"`
 		Token string `json:"token"`
 		Refresh_token string `json:"refresh_token"`
+		ChirpyRed bool `json:"is_chirpy_red"`
 	}
 
 	type requestBody struct {
@@ -374,7 +376,7 @@ func (cfg *apiConfig) LoginUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondWithJson(w, http.StatusOK, User{ID: user.ID, CreatedAt: user.CreatedAt, UpdatedAt: user.UpdatedAt, Email: user.Email, Token: token, Refresh_token: refresh_token})
+	respondWithJson(w, http.StatusOK, User{ID: user.ID, CreatedAt: user.CreatedAt, UpdatedAt: user.UpdatedAt, Email: user.Email, ChirpyRed: user.IsChirpyRed.Bool ,Token: token, Refresh_token: refresh_token})
 
 }
 
@@ -449,6 +451,7 @@ func (cfg *apiConfig) UpdateUser(w http.ResponseWriter, r *http.Request) {
                 CreatedAt time.Time `json:"created_at"`
                 UpdatedAt time.Time `json:"updated_at"`
                 Email     string    `json:"email"`
+				ChirpyRed bool `json:"is_chirpy_red"`
         }
 
 
@@ -499,7 +502,7 @@ func (cfg *apiConfig) UpdateUser(w http.ResponseWriter, r *http.Request) {
                 return
 	}
 
-	respondWithJson(w, http.StatusOK, User{ID: user.ID, CreatedAt: user.CreatedAt, UpdatedAt: user.UpdatedAt, Email: user.Email})
+	respondWithJson(w, http.StatusOK, User{ID: user.ID, CreatedAt: user.CreatedAt, UpdatedAt: user.UpdatedAt, Email: user.Email, ChirpyRed: user.IsChirpyRed.Bool})
 
 	
 
