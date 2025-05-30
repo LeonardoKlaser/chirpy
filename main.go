@@ -443,6 +443,149 @@ func (cfg *apiConfig) RevokeRefreshToken(w http.ResponseWriter, r *http.Request)
 	respondWithJson(w, http.StatusNoContent, nullInterface)
 }
 
+func (cfg *apiConfig) UpdateUser(w http.ResponseWriter, r *http.Request) {
+	type User struct {
+                ID        uuid.UUID `json:"id"`
+                CreatedAt time.Time `json:"created_at"`
+                UpdatedAt time.Time `json:"updated_at"`
+                Email     string    `json:"email"`
+        }
+
+
+	type requestBody struct {
+                Email     string `json:"email"`
+                Password  string `json:"password"`
+        }
+
+        decoder := json.NewDecoder(r.Body)
+        params := requestBody{}
+        err := decoder.Decode(&params)
+        if err != nil {
+                respondWithError(w, http.StatusBadRequest, "Invalid request body")
+                return
+        }
+
+	token, err := auth.GetBearerToken(r.Header)
+        if err != nil {
+                respondWithError(w, http.StatusUnauthorized, "Invalid or missing Bearer token")
+                return
+        }
+        if token == "" {
+                respondWithError(w, http.StatusUnauthorized, "Bearer token is empty")
+                return
+        }
+
+        uuidUser, err := auth.ValidateJWT(token, cfg.SecretKey)
+        if err != nil {
+                respondWithError(w, http.StatusUnauthorized, fmt.Sprintf("Invalid Bearer token: %v", err))
+                        return
+        }
+
+	passwordHashed, err := auth.HashPassword(params.Password)
+        if err != nil {
+                respondWithError(w, http.StatusBadRequest, "Error to has password")
+                return
+        }
+
+	args := database.UpdateUserByIdParams{
+		Email : params.Email,
+		Password: passwordHashed,
+		ID: uuidUser,
+	}
+
+	user, err := cfg.DB.UpdateUserById(r.Context(), args)
+	if err != nil{
+		respondWithError(w, http.StatusUnauthorized, fmt.Sprintf("Error to update user: %v", err))
+                return
+	}
+
+	respondWithJson(w, http.StatusOK, User{ID: user.ID, CreatedAt: user.CreatedAt, UpdatedAt: user.UpdatedAt, Email: user.Email})
+
+	
+
+}
+
+func (cfg *apiConfig) DeleteChirpById(w http.ResponseWriter, r *http.Request){
+	
+	token, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Invalid or missing Bearer token")
+		return
+	}
+	if token == "" {
+		respondWithError(w, http.StatusUnauthorized, "Bearer token is empty")
+		return
+	}
+
+	uuidUser, err := auth.ValidateJWT(token, cfg.SecretKey)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, fmt.Sprintf("Invalid Bearer token: %v", err))
+			return
+	}
+
+
+	id := r.PathValue("chirpID")
+	uuid, err := uuid.Parse(id)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, fmt.Sprintf("Error to retrieve chirp Id : %v ", err))
+		return
+	}
+
+	chirp, err := cfg.DB.GetChirpById(r.Context(), uuid)
+	if err != nil {
+		respondWithError(w, http.StatusNotFound, fmt.Sprintf("Chirp with ID %s not found", id))
+		return
+	}
+
+	if uuidUser != chirp.UserID {
+		respondWithError(w, http.StatusForbidden, fmt.Sprintf("You can just delete chirps posteds by your userID: ", uuid))
+                return
+	}
+
+ 	_, err = cfg.DB.DeleteChirpById(r.Context(), uuid)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, fmt.Sprintf("Error to delete chirp : %v ", err))
+                return
+	}
+	
+	var nullInterface interface{}
+
+	respondWithJson(w, http.StatusNoContent, nullInterface)
+}
+
+func (cfg *apiConfig) PolkaWebhook (w http.ResponseWriter, r *http.Request){
+	type DataUserId struct {
+                userId uuid.UUID `json:"user_id"`
+        }
+
+	type requestBody struct{
+		Event string `json:"event"`
+		Data DataUserId `json:"data"`
+	}
+
+	decoder := json.NewDecoder(r.Body)
+	params := requestBody{}
+	err := decoder.Decode(&params)
+	if err != nil{
+		respondWithError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+	var nullInterface interface{}
+	if params.Event == "user.upgraded" {
+		_,err := cfg.DB.UpgradeToRed(r.Context(), params.Data.userId)
+		if err != nil {
+			respondWithError(w, http.StatusNotFound, "User not found")
+                	return
+		}
+	}
+
+
+	respondWithJson(w, http.StatusNoContent, nullInterface)
+
+}
+
+	
+
 func main() {
 
 	godotenv.Load()
@@ -480,6 +623,8 @@ func main() {
 
 	router.HandleFunc("POST /api/chirps", apiCfg.PostChirps)
 
+	router.HandleFunc("DELETE /api/chirps/{chirpID}", apiCfg.DeleteChirpById)
+
 	router.HandleFunc("GET /api/chirps", apiCfg.ListChirps)
 
 	router.HandleFunc("GET /api/chirps/{id}", apiCfg.GetChirp)
@@ -489,6 +634,10 @@ func main() {
 	router.HandleFunc("POST /api/revoke", apiCfg.RevokeRefreshToken)
 
 	router.HandleFunc("POST /api/refresh", apiCfg.RefreshToken)
+
+	router.HandleFunc("PUT /api/users", apiCfg.UpdateUser)
+
+	router.HandleFunc("POST /api/polka/webhooks", apiCfg.PolkaWebhook)
 
 	server := &http.Server{
 		Addr:    ":8080",
