@@ -558,7 +558,7 @@ func (cfg *apiConfig) DeleteChirpById(w http.ResponseWriter, r *http.Request){
 
 func (cfg *apiConfig) PolkaWebhook (w http.ResponseWriter, r *http.Request){
 	type DataUserId struct {
-                userId uuid.UUID `json:"user_id"`
+                UserId uuid.UUID `json:"user_id"`
         }
 
 	type requestBody struct{
@@ -575,7 +575,7 @@ func (cfg *apiConfig) PolkaWebhook (w http.ResponseWriter, r *http.Request){
 	}
 	var nullInterface interface{}
 	if params.Event == "user.upgraded" {
-		_,err := cfg.DB.UpgradeToRed(r.Context(), params.Data.userId)
+		_,err := cfg.DB.UpgradeToRed(r.Context(), params.Data.UserId)
 		if err != nil {
 			respondWithError(w, http.StatusNotFound, "User not found")
                 	return
