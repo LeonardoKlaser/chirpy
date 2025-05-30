@@ -448,7 +448,7 @@ func (cfg *apiConfig) RevokeRefreshToken(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	var nullInterface interface{}
-	respondWithJson(w, http.StatusOK, nullInterface)
+	respondWithJson(w, http.StatusNoContent, nullInterface)
 }
 
 func main() {
