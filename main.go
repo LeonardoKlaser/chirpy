@@ -359,7 +359,15 @@ func (cfg *apiConfig) LoginUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	refresh_token, _ := auth.MakeRefreshToken()
-	_, err = cfg.DB.CreateRefreshToken(r.Context(),refresh_token, user.ID, time.Now().Add(60))
+	args := database.CreateRefreshTokenParams{
+		Token: refresh_token,
+		UserID: user.ID,
+		ExpiresAt: sql.NullTime{
+			Time: time.Now().Add((24 * time.Hour) * 60 ),
+			Valid: true,
+		},
+	}
+	_, err = cfg.DB.CreateRefreshToken(r.Context(), args)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Error generating refresh Token")
 		return
@@ -398,7 +406,15 @@ func (cfg *apiConfig) RefreshToken(w http.ResponseWriter, r *http.Request){
 	}
 
 	refresh_token, _ := auth.MakeRefreshToken()
-	_, err = cfg.DB.CreateRefreshToken(r.Context(),refresh_token, user.ID, time.Now().Add(1))
+	args := database.CreateRefreshTokenParams{
+		Token: refresh_token,
+		UserID: user.ID,
+		ExpiresAt: sql.NullTime{
+			Time: time.Now().Add(1 * time.Hour ),
+			Valid: true,
+		},
+	}
+	_, err = cfg.DB.CreateRefreshToken(r.Context(),args)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Error generating refresh Token")
 		return
@@ -481,7 +497,7 @@ func main() {
 	router.HandleFunc("POST /api/revoke", apiCfg.RevokeRefreshToken)
 
 	router.HandleFunc("POST /api/refresh", apiCfg.RefreshToken)
-	
+
 	server := &http.Server{
 		Addr:    ":8080",
 		Handler: router,
