@@ -9,7 +9,7 @@ RETURNING *;
 -- name: GetValidRefreshToken :one 
 SELECT EXISTS (SELECT 1 FROM refresh_tokens WHERE token = $1 AND expires_at > NOW() AND revoked_at IS NULL);
 
--- name: RevokeRefreshToken :one
+-- name: RevokeRefreshToken :execresult
 UPDATE refresh_tokens SET revoked_at = NOW(), updated_at = NOW() WHERE token = $1;
 
 -- name: GetUserForValidRefreshToken :one
