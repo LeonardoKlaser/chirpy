@@ -278,11 +278,23 @@ func (cfg *apiConfig) PostChirps(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
+	var refreshUser database.User
 	uuidUser, err := auth.ValidateJWT(token, cfg.SecretKey)
 	if err != nil {
-		respondWithError(w, http.StatusUnauthorized, fmt.Sprintf("Invalid Bearer token: %v", err))
-		return
+		exist, err := cfg.DB.GetValidRefreshToken(r.Context(),token)
+		if err != nil && exist != false {
+			respondWithError(w, http.StatusUnauthorized, fmt.Sprintf("Invalid Bearer token: %v", err))
+			return
+		}
+
+		refreshUser, err = cfg.DB.GetUserForValidRefreshToken(r.Context(),token)
+		if err != nil {
+			respondWithError(w, http.StatusUnauthorized, fmt.Sprintf("Invalid Bearer token: %v", err))
+			return
+		}
+		uuidUser = refreshUser.ID
 	}
+	
 	decoder := json.NewDecoder(r.Body)
 	params := requestBody{}
 	err = decoder.Decode(&params)
