@@ -278,21 +278,10 @@ func (cfg *apiConfig) PostChirps(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
-	var refreshUser database.User
 	uuidUser, err := auth.ValidateJWT(token, cfg.SecretKey)
 	if err != nil {
-		exist, err := cfg.DB.GetValidRefreshToken(r.Context(),token)
-		if err != nil && exist != false {
-			respondWithError(w, http.StatusUnauthorized, fmt.Sprintf("Invalid Bearer token: %v", err))
+		respondWithError(w, http.StatusUnauthorized, fmt.Sprintf("Invalid Bearer token: %v", err))
 			return
-		}
-
-		refreshUser, err = cfg.DB.GetUserForValidRefreshToken(r.Context(),token)
-		if err != nil {
-			respondWithError(w, http.StatusUnauthorized, fmt.Sprintf("Invalid Bearer token: %v", err))
-			return
-		}
-		uuidUser = refreshUser.ID
 	}
 	
 	decoder := json.NewDecoder(r.Body)
@@ -406,7 +395,7 @@ func (cfg *apiConfig) RefreshToken(w http.ResponseWriter, r *http.Request){
 	}
 
 	exist, err := cfg.DB.GetValidRefreshToken(r.Context(),token)
-	if err != nil && exist != false {
+	if err != nil && !exist{
 		respondWithError(w, http.StatusUnauthorized, "Token invalid")
 		return
 	}
@@ -417,22 +406,13 @@ func (cfg *apiConfig) RefreshToken(w http.ResponseWriter, r *http.Request){
 		return
 	}
 
-	refresh_token, _ := auth.MakeRefreshToken()
-	args := database.CreateRefreshTokenParams{
-		Token: refresh_token,
-		UserID: user.ID,
-		ExpiresAt: sql.NullTime{
-			Time: time.Now().Add(1 * time.Hour ),
-			Valid: true,
-		},
-	}
-	_, err = cfg.DB.CreateRefreshToken(r.Context(),args)
+	tokenAcces, err := auth.MakeJWT(user.ID, cfg.SecretKey, time.Duration(3600)*time.Second)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Error generating refresh Token")
+		respondWithError(w, http.StatusInternalServerError, "Error generating JWT token")
 		return
 	}
 	
-	returnToken := responseBody{Token: refresh_token} 
+	returnToken := responseBody{Token: tokenAcces} 
 
 	respondWithJson(w, http.StatusOK, returnToken )
 }
@@ -449,7 +429,7 @@ func (cfg *apiConfig) RevokeRefreshToken(w http.ResponseWriter, r *http.Request)
 	}
 
 	exist, err := cfg.DB.GetValidRefreshToken(r.Context(),token)
-	if err != nil && exist != false {
+	if err != nil && !exist {
 		respondWithError(w, http.StatusUnauthorized, "Token invalid")
 		return
 	}
