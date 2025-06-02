@@ -7,7 +7,6 @@ import (
 	"strings"
 	"sort"
 	"github.com/google/uuid"
-	"github.com/leonardoklaser/Chirpy/internal/auth"
 	"github.com/leonardoklaser/Chirpy/internal/config"
 	"github.com/leonardoklaser/Chirpy/internal/database"
 	"github.com/leonardoklaser/Chirpy/models"
@@ -144,20 +143,9 @@ func PostChirps(w http.ResponseWriter, r *http.Request) {
 		UserID uuid.UUID `json:"user_id"`
 	}
 
-	token, err := auth.GetBearerToken(r.Header)
-	if err != nil {
-		utils.RespondWithError(w, http.StatusUnauthorized, "Invalid or missing Bearer token")
-		return
-	}
-	if token == "" {
-		utils.RespondWithError(w, http.StatusUnauthorized, "Bearer token is empty")
-		return
-	}
-	
-	uuidUser, err := auth.ValidateJWT(token, cfg.SecretKey)
-	if err != nil {
-		utils.RespondWithError(w, http.StatusUnauthorized, fmt.Sprintf("Invalid Bearer token: %v", err))
-			return
+	uuidUser, ok := r.Context().Value(config.UserIDKey).(uuid.UUID)
+	if !ok {
+		utils.RespondWithError(w, 500, fmt.Sprintf("omg you're so bad at this"))
 	}
 	
 	decoder := json.NewDecoder(r.Body)
@@ -202,22 +190,10 @@ func DeleteChirpById(w http.ResponseWriter, r *http.Request){
 		utils.RespondWithError(w, http.StatusBadRequest ,"Error to retrieve server configurations")
 	}
 
-	token, err := auth.GetBearerToken(r.Header)
-	if err != nil {
-		utils.RespondWithError(w, http.StatusUnauthorized, "Invalid or missing Bearer token")
-		return
+	uuidUser, ok := r.Context().Value(config.UserIDKey).(uuid.UUID)
+	if !ok {
+		utils.RespondWithError(w, 500, fmt.Sprintf("omg you're so bad at this"))
 	}
-	if token == "" {
-		utils.RespondWithError(w, http.StatusUnauthorized, "Bearer token is empty")
-		return
-	}
-
-	uuidUser, err := auth.ValidateJWT(token, cfg.SecretKey)
-	if err != nil {
-		utils.RespondWithError(w, http.StatusUnauthorized, fmt.Sprintf("Invalid Bearer token: %v", err))
-			return
-	}
-
 
 	id := r.PathValue("chirpID")
 	uuid, err := uuid.Parse(id)

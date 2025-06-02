@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/leonardoklaser/Chirpy/internal/auth"
 	"github.com/leonardoklaser/Chirpy/internal/config"
 	"github.com/leonardoklaser/Chirpy/internal/database"
@@ -34,20 +35,9 @@ func UpdateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := auth.GetBearerToken(r.Header)
-	if err != nil {
-		utils.RespondWithError(w, http.StatusUnauthorized, "Invalid or missing Bearer token")
-		return
-	}
-	if token == "" {
-		utils.RespondWithError(w, http.StatusUnauthorized, "Bearer token is empty")
-		return
-	}
-
-	uuidUser, err := auth.ValidateJWT(token, cfg.SecretKey)
-	if err != nil {
-		utils.RespondWithError(w, http.StatusUnauthorized, fmt.Sprintf("Invalid Bearer token: %v", err))
-		return
+	uuidUser, ok := r.Context().Value(config.UserIDKey).(uuid.UUID)
+	if !ok {
+		utils.RespondWithError(w, 500, fmt.Sprintf("omg you're so bad at this"))
 	}
 
 	passwordHashed, err := auth.HashPassword(params.Password)

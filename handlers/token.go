@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 
@@ -20,14 +21,9 @@ func RefreshToken(w http.ResponseWriter, r *http.Request){
 		Token string `json:"token"`
 	}
 
-	token, err := auth.GetBearerToken(r.Header)
-	if err != nil {
-		utils.RespondWithError(w, http.StatusUnauthorized, "Invalid or missing Bearer token")
-		return
-	}
-	if token == "" {
-		utils.RespondWithError(w, http.StatusUnauthorized, "Bearer token is empty")
-		return
+	token, ok := r.Context().Value(config.TokenKey).(string)
+	if !ok {
+		utils.RespondWithError(w, 500, fmt.Sprintf("omg you're so bad at this"))
 	}
 
 	exist, err := cfg.DB.GetValidRefreshToken(r.Context(),token)
@@ -60,14 +56,9 @@ func RevokeRefreshToken(w http.ResponseWriter, r *http.Request){
 		utils.RespondWithError(w, http.StatusBadRequest ,"Error to retrieve server configurations")
 	}
 	
-	token, err := auth.GetBearerToken(r.Header)
-	if err != nil {
-		utils.RespondWithError(w, http.StatusUnauthorized, "Invalid or missing Bearer token")
-		return
-	}
-	if token == "" {
-		utils.RespondWithError(w, http.StatusUnauthorized, "Bearer token is empty")
-		return
+	token, ok := r.Context().Value(config.TokenKey).(string)
+	if !ok {
+		utils.RespondWithError(w, 500, fmt.Sprintf("omg you're so bad at this"))
 	}
 
 	exist, err := cfg.DB.GetValidRefreshToken(r.Context(),token)

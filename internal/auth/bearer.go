@@ -6,7 +6,7 @@ import (
 	"errors"
 )
 
-func GetBearerToken(headers http.Header) (string, error){
+func GetBearerToken(headers *http.Header) (string, error){
 	authHeader := headers.Get("Authorization")
 	if len(strings.Split(authHeader, " ") ) < 2{
 		return "", errors.New("invalid Authorization header format")

@@ -5,7 +5,6 @@ import (
 	"github.com/leonardoklaser/Chirpy/internal/config"
 	"encoding/json"
 	"github.com/google/uuid"
-	"github.com/leonardoklaser/Chirpy/internal/auth"
 	"github.com/leonardoklaser/Chirpy/utils"
 )
 
@@ -23,17 +22,6 @@ func PolkaWebhook(w http.ResponseWriter, r *http.Request){
 	type requestBody struct{
 		Event string `json:"event"`
 		Data DataUserId `json:"data"`
-	}
-
-	apiPolka, err := auth.GetAPIKey(r.Header)
-	if err != nil{
-		utils.RespondWithError(w, http.StatusUnauthorized, "Api token not found at header request")
-                return
-	}
-
-	if cfg.PolkaKey != apiPolka{
-		utils.RespondWithError(w, http.StatusUnauthorized, "Invalid token")
-                return
 	}
 
 	decoder := json.NewDecoder(r.Body)
